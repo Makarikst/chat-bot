@@ -1,0 +1,11 @@
+[project]
+name = "pythonproject1"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "langchain-community>=0.3.31",
+    "langchain-core>=0.3.86",
+    "langchain-openai>=0.3.35",
+    "langchain-tavily>=0.2.11",
+    "streamlit>=1.50.0",
+]
