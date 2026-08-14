@@ -6,13 +6,37 @@ from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from langchain_core.tools import Tool
 from langchain_tavily import TavilySearch
 
-if __name__ == 'main':
+# Press the green button in the gutter to run the script.
+if __name__ == '__main__':
     os.environ["TAVILY_API_KEY"] = "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"
 
     # 1. Set up the web page title and icon
     st.set_page_config(page_title="Это Mingly AI", page_icon="🤖")
     st.title("🤖 Mingly AI (Qwen если что)")
     st.write("Привет! Напиши мне сообщение.")
+
+    # --- FILE UPLOAD SECTION ---
+    if "uploaded_files" not in st.session_state:
+        st.session_state.uploaded_files = {}
+
+    uploaded = st.file_uploader(
+        "Загрузить текстовый файл",
+        type=["txt", "md", "csv", "log", "json", "xml", "yaml", "yml", "toml", "ini", "cfg", "conf", "sh", "py", "js",
+              "ts", "html", "css"],
+        accept_multiple_files=False
+    )
+
+    if uploaded:
+        # for file in uploaded:
+        try:
+            content = uploaded.read().decode("utf-8")
+        except UnicodeDecodeError:
+            uploaded.seek(0)
+            content = uploaded.read().decode("latin-1")
+        st.session_state.uploaded_files[uploaded.name] = content
+        # st.success(f"Загружено файлов: {len(uploaded)}")
+        st.session_state.messages = []
+
 
     # 2. Connect LangChain to LM Studio
     # We tell LangChain to look at our own computer (localhost:1234) instead of the internet!
@@ -32,8 +56,6 @@ if __name__ == 'main':
         except Exception:
             tavily_tool = None
 
-        # ddg_tool = DuckDuckGoSearchRun()
-
         def fallback_search_logic(query: str) -> str:
             # Use Tavily if key is provided, otherwise fall back to DuckDuckGo
             if tavily_tool and os.getenv("TAVILY_API_KEY"):
@@ -42,10 +64,6 @@ if __name__ == 'main':
                 except Exception as e:
                     print(f"Tavily failed, dropping to DDG: {e}")
             return "Error: Search failed. Rely purely on internal knowledge."
-            # try:
-            #     return str(ddg_tool.invoke(query))
-            # except Exception:
-            #     return "Error: Search failed. Rely purely on internal knowledge."
 
         return Tool(
             name="web_search",
@@ -53,13 +71,37 @@ if __name__ == 'main':
             description="Search the web for current events, news, or real-time data lookups."
         )
 
+
+    def initialize_file_reader_tool():
+        def read_file_content(filename: str) -> str:
+            uploaded_files = st.session_state.get("uploaded_files", {})
+            if not filename:
+                if uploaded_files:
+                    return "Available files: " + ", ".join(uploaded_files.keys())
+                return "No files uploaded. Upload a file using the file uploader above."
+            if filename not in uploaded_files:
+                return f"File '{filename}' not found. Available files: {', '.join(uploaded_files.keys()) if uploaded_files else 'none'}"
+            content = uploaded_files[filename]
+            max_length = 100000
+            if len(content) > max_length:
+                content = content[:max_length] + f"\n\n... [truncated, file exceeds {max_length} characters]"
+            return content
+
+        return Tool(
+            name="file_reader",
+            func=read_file_content,
+            description="Read the content of an uploaded text file. Pass the filename. If no filename given, lists available files."
+        )
+
+
     llm = load_llm()
     # --- 1. INITIALIZE SEARCH TOOLS & FALLBACK ---
     search_tool = initialize_search_tool()
-    tools_map = {search_tool.name: search_tool}
+    file_reader_tool = initialize_file_reader_tool()
+    tools_map = {search_tool.name: search_tool, file_reader_tool.name: file_reader_tool}
 
     # --- 2. BIND TOOLS TO LLM ---
-    llm_with_tools = llm.bind_tools([search_tool])
+    llm_with_tools = llm.bind_tools([search_tool, file_reader_tool])
 
     # --- 3. SESSION STATE MEMORY ---
     if "messages" not in st.session_state:
@@ -68,7 +110,7 @@ if __name__ == 'main':
     # --- 4. BUILD THE CHAIN ---
     prompt = ChatPromptTemplate.from_messages([
         ("system",
-         "You are an advanced assistant equipped with real-time web search capabilities. If you need information, call the web_search tool."),
+         "You are an advanced assistant equipped with real-time web search and file reading capabilities. If you need information, call the web_search tool. If the user references an uploaded file, call the file_reader tool."),
         MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{input}"),
     ])
@@ -89,6 +131,8 @@ if __name__ == 'main':
         # Render user query immediately
         with st.chat_message("user"):
             st.markdown(user_input)
+            if uploaded:
+                st.info(f"📄 Attached file: {uploaded.name}")
 
         user_message_object = HumanMessage(content=user_input)
         st.session_state.messages.append(user_message_object)
@@ -100,7 +144,7 @@ if __name__ == 'main':
                 try:
                     # Pull history up to (but not including) the current question
                     history_context = st.session_state.messages[:-1]
-# Step A: Invoke the first layer of the chain to check if a tool call is needed
+                    # Step A: Invoke the first layer of the chain to check if a tool call is needed
                     status_placeholder.markdown("🧠 *Thinking...*")
                     response_message = modern_agent_chain.invoke({
                         "input": user_input,
