@@ -22,7 +22,7 @@ if __name__ == '__main__':
     uploaded = st.file_uploader(
         "Загрузить текстовый файл",
         type=["txt", "md", "csv", "log", "json", "xml", "yaml", "yml", "toml", "ini", "cfg", "conf", "sh", "py", "js",
-              "ts", "html", "css"],
+              "ts", "html", "css", "pl"],
         accept_multiple_files=False
     )
 
