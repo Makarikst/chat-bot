@@ -168,6 +168,81 @@ if __name__ == '__main__':
                     else:
                         st.markdown(msg.content)
 
+                # --- 6. USER INPUT LOOP ---
+                user_input = st.chat_input("Написать здесь...")
+                if user_input:
+                    attached_image = st.session_state.uploaded_image
+
+                    with st.chat_message("user"):
+                        st.markdown(user_input)
+                        if attached_image:
+                            st.image(attached_image, use_container_width=False)
+                            st.info(f"🖼️ Attached image: {uploaded.name}")
+                        elif uploaded:
+                            st.info(f"📄 Attached file: {uploaded.name}")
+
+                    if attached_image:
+                        user_message_object = HumanMessage(content=[
+                            {"type": "text", "text": user_input},
+                            {"type": "image_url", "image_url": {"url": attached_image}}
+                        ])
+                    else:
+                        user_message_object = HumanMessage(content=user_input)
+
+                    st.session_state.messages.append(user_message_object)
+
+                    with st.chat_message("assistant"):
+                        status_placeholder = st.empty()
+                        with st.spinner("Думаю..."):
+                            try:
+                                history_context = st.session_state.messages[:-1]
+
+                                if attached_image:
+                                    system_msg = SystemMessage(
+                                        content="You are an advanced assistant equipped with real-time web search "
+                                                "and vision capabilities. You can analyze images and describe their "
+                                                "contents. If you need information, call the web_search tool."
+                                    )
+                                    full_messages = [system_msg] + history_context + [user_message_object]
+                                    status_placeholder.markdown("🧠 *Thinking...*")
+                                    response_message = llm_with_tools.invoke(full_messages)
+                                else:
+                                    status_placeholder.markdown("🧠 *Thinking...*")
+                                    response_message = modern_agent_chain.invoke({
+                                        "input": user_input,
+                                        "chat_history": history_context
+                                    })
+
+                                if response_message.tool_calls:
+                                    st.session_state.messages.append(response_message)
+
+                                    for tool_call in response_message.tool_calls:
+                                        tool_name = tool_call["name"]
+                                        tool_args = tool_call["args"]
+
+                                        status_placeholder.markdown(f"🔍 *Executing tool lookup: {tool_name}...*")
+
+                                        target_tool = tools_map[tool_name]
+                                        query_arg = tool_args.get("query") or tool_args.get("__arg1") or str(tool_args)
+                                        tool_output = target_tool.invoke(query_arg)
+
+                                        tool_message = ToolMessage(content=tool_output, tool_call_id=tool_call["id"])
+                                        st.session_state.messages.append(tool_message)
+
+                                    status_placeholder.markdown("✍️ *Writing final answer...*")
+                                    final_response = llm.invoke(st.session_state.messages)
+                                    bot_response = final_response.content
+                                else:
+                                    bot_response = response_message.content
+                            except Exception as e:
+                                bot_response = f"Oops! Is your LM Studio Local Server running? Error: {e}"
+
+                        status_placeholder.empty()
+                        st.markdown(bot_response)
+                        st.session_state.messages.append(AIMessage(content=bot_response))
+
+                    st.session_state.uploaded_image = None
+
             # Clean up indicators and print the real text answer
             status_placeholder.empty()
             st.markdown(bot_response)
