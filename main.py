@@ -1,9 +1,11 @@
-import streamlit as st
 import os
-from langchain_openai import ChatOpenAI
+import base64
+from dotenv import load_dotenv
+import streamlit as st
+from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from langchain_core.tools import Tool
+from langchain_openai import ChatOpenAI
 from langchain_tavily import TavilySearch
 
 # Press the green button in the gutter to run the script.
@@ -22,7 +24,7 @@ if __name__ == '__main__':
     uploaded = st.file_uploader(
         "Загрузить текстовый файл",
         type=["txt", "md", "csv", "log", "json", "xml", "yaml", "yml", "toml", "ini", "cfg", "conf", "sh", "py", "js",
-              "ts", "html", "css", "pl"],
+              "ts", "html", "css", "pl", "htm", "docx", "cs", "cpp", "cxx","c", "lua", "kt", "toml", "swift", "php", ""],
         accept_multiple_files=False
     )
 
