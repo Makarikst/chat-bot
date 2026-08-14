@@ -1,7 +1,6 @@
 import os
 import base64
 
-from dotenv import load_dotenv
 import streamlit as st
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -66,7 +65,7 @@ if __name__ == '__main__':
     @st.cache_resource
     def load_llm():
         return ChatOpenAI(
-            base_url="http://192.168.87.7:1234/v1",
+            base_url="http://127.0.0.1:1234/v1",
             api_key="lm-studio",
             temperature=0.7
         )
@@ -154,98 +153,77 @@ if __name__ == '__main__':
             else:
                 st.markdown(msg.content)
 
-            for msg in st.session_state.messages:
-                if isinstance(msg, ToolMessage):
-                    continue
-                role = "user" if isinstance(msg, HumanMessage) else "assistant"
-                with st.chat_message(role):
-                    if isinstance(msg.content, list):
-                        for item in msg.content:
-                            if item["type"] == "text":
-                                st.markdown(item["text"])
-                            elif item["type"] == "image_url":
-                                st.image(item["image_url"]["url"], use_container_width=False)
-                    else:
-                        st.markdown(msg.content)
+    # --- 6. USER INPUT LOOP ---
+    user_input = st.chat_input("Написать здесь...")
+    if user_input:
+        attached_image = st.session_state.uploaded_image
 
-                # --- 6. USER INPUT LOOP ---
-                user_input = st.chat_input("Написать здесь...")
-                if user_input:
-                    attached_image = st.session_state.uploaded_image
+        with st.chat_message("user"):
+            st.markdown(user_input)
+            if attached_image:
+                st.image(attached_image, use_container_width=False)
+                st.info(f"🖼️ Attached image: {uploaded.name}")
+            elif uploaded:
+                st.info(f"📄 Attached file: {uploaded.name}")
 
-                    with st.chat_message("user"):
-                        st.markdown(user_input)
-                        if attached_image:
-                            st.image(attached_image, use_container_width=False)
-                            st.info(f"🖼️ Attached image: {uploaded.name}")
-                        elif uploaded:
-                            st.info(f"📄 Attached file: {uploaded.name}")
+        if attached_image:
+            user_message_object = HumanMessage(content=[
+                {"type": "text", "text": user_input},
+                {"type": "image_url", "image_url": {"url": attached_image}}
+            ])
+        else:
+            user_message_object = HumanMessage(content=user_input)
+
+        st.session_state.messages.append(user_message_object)
+
+        with st.chat_message("assistant"):
+            status_placeholder = st.empty()
+            with st.spinner("Думаю..."):
+                try:
+                    history_context = st.session_state.messages[:-1]
 
                     if attached_image:
-                        user_message_object = HumanMessage(content=[
-                            {"type": "text", "text": user_input},
-                            {"type": "image_url", "image_url": {"url": attached_image}}
-                        ])
+                        system_msg = SystemMessage(
+                            content="You are an advanced assistant equipped with real-time web search "
+                                    "and vision capabilities. You can analyze images and describe their "
+                                    "contents. If you need information, call the web_search tool."
+                        )
+                        full_messages = [system_msg] + history_context + [user_message_object]
+                        status_placeholder.markdown("🧠 *Thinking...*")
+                        response_message = llm_with_tools.invoke(full_messages)
                     else:
-                        user_message_object = HumanMessage(content=user_input)
+                        status_placeholder.markdown("🧠 *Thinking...*")
+                        response_message = modern_agent_chain.invoke({
+                            "input": user_input,
+                            "chat_history": history_context
+                        })
 
-                    st.session_state.messages.append(user_message_object)
+                        if response_message.tool_calls:
+                            st.session_state.messages.append(response_message)
 
-                    with st.chat_message("assistant"):
-                        status_placeholder = st.empty()
-                        with st.spinner("Думаю..."):
-                            try:
-                                history_context = st.session_state.messages[:-1]
+                            for tool_call in response_message.tool_calls:
+                                tool_name = tool_call["name"]
+                                tool_args = tool_call["args"]
 
-                                if attached_image:
-                                    system_msg = SystemMessage(
-                                        content="You are an advanced assistant equipped with real-time web search "
-                                                "and vision capabilities. You can analyze images and describe their "
-                                                "contents. If you need information, call the web_search tool."
-                                    )
-                                    full_messages = [system_msg] + history_context + [user_message_object]
-                                    status_placeholder.markdown("🧠 *Thinking...*")
-                                    response_message = llm_with_tools.invoke(full_messages)
-                                else:
-                                    status_placeholder.markdown("🧠 *Thinking...*")
-                                    response_message = modern_agent_chain.invoke({
-                                        "input": user_input,
-                                        "chat_history": history_context
-                                    })
+                                status_placeholder.markdown(f"🔍 *Executing tool lookup: {tool_name}...*")
 
-                                if response_message.tool_calls:
-                                    st.session_state.messages.append(response_message)
+                                target_tool = tools_map[tool_name]
+                                query_arg = tool_args.get("query") or tool_args.get("__arg1") or str(tool_args)
+                                tool_output = target_tool.invoke(query_arg)
 
-                                    for tool_call in response_message.tool_calls:
-                                        tool_name = tool_call["name"]
-                                        tool_args = tool_call["args"]
+                                tool_message = ToolMessage(content=tool_output, tool_call_id=tool_call["id"])
+                                st.session_state.messages.append(tool_message)
 
-                                        status_placeholder.markdown(f"🔍 *Executing tool lookup: {tool_name}...*")
+                            status_placeholder.markdown("✍️ *Writing final answer...*")
+                            final_response = llm.invoke(st.session_state.messages)
+                            bot_response = final_response.content
+                        else:
+                            bot_response = response_message.content
+                except Exception as e:
+                        bot_response = f"Oops! Is your LM Studio Local Server running? Error: {e}"
 
-                                        target_tool = tools_map[tool_name]
-                                        query_arg = tool_args.get("query") or tool_args.get("__arg1") or str(tool_args)
-                                        tool_output = target_tool.invoke(query_arg)
+                status_placeholder.empty()
+                st.markdown(bot_response)
+                st.session_state.messages.append(AIMessage(content=bot_response))
 
-                                        tool_message = ToolMessage(content=tool_output, tool_call_id=tool_call["id"])
-                                        st.session_state.messages.append(tool_message)
-
-                                    status_placeholder.markdown("✍️ *Writing final answer...*")
-                                    final_response = llm.invoke(st.session_state.messages)
-                                    bot_response = final_response.content
-                                else:
-                                    bot_response = response_message.content
-                            except Exception as e:
-                                bot_response = f"Oops! Is your LM Studio Local Server running? Error: {e}"
-
-                        status_placeholder.empty()
-                        st.markdown(bot_response)
-                        st.session_state.messages.append(AIMessage(content=bot_response))
-
-                    st.session_state.uploaded_image = None
-
-            # Clean up indicators and print the real text answer
-            status_placeholder.empty()
-            st.markdown(bot_response)
-
-            # Store final response object to complete memory loop
-            st.session_state.messages.append(AIMessage(content=bot_response))
+            st.session_state.uploaded_image = None
