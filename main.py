@@ -31,7 +31,7 @@ if __name__ == '__main__':
     if "uploaded_image" not in st.session_state:
         st.session_state.uploaded_image = None
 
-    image_types = ["png", "jpg", "jpeg"],
+    image_types = ["png", "jpg", "jpeg"]
     text_types = ["txt", "md", "csv", "log", "json", "xml", "yaml", "yml", "toml", "ini", "cfg", "conf", "sh", "py",
                   "js", "ts", "html", "css", "pl", "htm", "docx", "cs", "cpp", "cxx", "c", "lua", "kt", "toml", "swift",
                   "php"]
