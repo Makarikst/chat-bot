@@ -31,10 +31,14 @@ if __name__ == '__main__':
     if "uploaded_image" not in st.session_state:
         st.session_state.uploaded_image = None
 
+    image_types = ["png", "jpg", "jpeg"],
+    text_types = ["txt", "md", "csv", "log", "json", "xml", "yaml", "yml", "toml", "ini", "cfg", "conf", "sh", "py",
+                  "js", "ts", "html", "css", "pl", "htm", "docx", "cs", "cpp", "cxx", "c", "lua", "kt", "toml", "swift",
+                  "php"]
+
     uploaded = st.file_uploader(
         "Загрузить файл",
-        image_types=["png", "jpg", "jpeg"],
-        text_types=["txt", "md", "csv", "log", "json", "xml", "yaml", "yml", "toml", "ini", "cfg", "conf", "sh", "py", "js", "ts", "html", "css", "pl", "htm", "docx", "cs", "cpp", "cxx", "c", "lua", "kt", "toml", "swift", "php"],
+        type=image_types + text_types,
         accept_multiple_files=False
     )
 
@@ -138,68 +142,31 @@ if __name__ == '__main__':
     # --- 5. RENDER THE CHAT HISTORY ---
     for msg in st.session_state.messages:
         if isinstance(msg, ToolMessage):
-            continue  # Don't render raw tool JSON messages directly to the user UI
-        with st.chat_message("user" if isinstance(msg, HumanMessage) else "assistant"):
-            st.markdown(msg.content)
+            continue
+        role = "user" if isinstance(msg, HumanMessage) else "assistant"
+        with st.chat_message(role):
+            if isinstance(msg.content, list):
+                for item in msg.content:
+                    if item["type"] == "text":
+                        st.markdown(item["text"])
+                    elif item["type"] == "image_url":
+                        st.image(item["image_url"]["url"], use_container_width=False)
+            else:
+                st.markdown(msg.content)
 
-    # --- 6. USER INPUT LOOP ---
-    user_input = st.chat_input("Написать здесь...")
-    # 5. What happens when the user presses Enter?
-    if user_input:
-        # Render user query immediately
-        with st.chat_message("user"):
-            st.markdown(user_input)
-            if uploaded:
-                st.info(f"📄 Attached file: {uploaded.name}")
-
-        user_message_object = HumanMessage(content=user_input)
-        st.session_state.messages.append(user_message_object)
-
-        # Show a loading spinner while the local AI thinks
-        with st.chat_message("assistant"):
-            status_placeholder = st.empty()
-            with st.spinner("Думаю..."):
-                try:
-                    # Pull history up to (but not including) the current question
-                    history_context = st.session_state.messages[:-1]
-                    # Step A: Invoke the first layer of the chain to check if a tool call is needed
-                    status_placeholder.markdown("🧠 *Thinking...*")
-                    response_message = modern_agent_chain.invoke({
-                        "input": user_input,
-                        "chat_history": history_context
-                    })
-
-                    # Step B: Check if the AI wants to use our search tool
-                    if response_message.tool_calls:
-                        # Store the AI's intent to call a tool
-                        st.session_state.messages.append(response_message)
-
-                        for tool_call in response_message.tool_calls:
-                            tool_name = tool_call["name"]
-                            tool_args = tool_call["args"]
-
-                            status_placeholder.markdown(f"🔍 *Executing tool lookup: {tool_name}...*")
-
-                            # Fetch tool function and query arguments from the incoming payload
-                            target_tool = tools_map[tool_name]
-                            query_arg = tool_args.get("query") or tool_args.get("__arg1") or str(tool_args)
-
-                            # Execute the actual search execution
-                            tool_output = target_tool.invoke(query_arg)
-
-                            # Store the tool outcome results back in history
-                            tool_message = ToolMessage(content=tool_output, tool_call_id=tool_call["id"])
-                            st.session_state.messages.append(tool_message)
-
-                        # Step C: Re-run the LLM with the new search context attached to its history
-                        status_placeholder.markdown("✍️ *Writing final answer...*")
-                        final_response = llm.invoke(st.session_state.messages)
-                        bot_response = final_response.content
+            for msg in st.session_state.messages:
+                if isinstance(msg, ToolMessage):
+                    continue
+                role = "user" if isinstance(msg, HumanMessage) else "assistant"
+                with st.chat_message(role):
+                    if isinstance(msg.content, list):
+                        for item in msg.content:
+                            if item["type"] == "text":
+                                st.markdown(item["text"])
+                            elif item["type"] == "image_url":
+                                st.image(item["image_url"]["url"], use_container_width=False)
                     else:
-                        # No tool was needed, use the standard immediate text response
-                        bot_response = response_message.content
-                except Exception as e:
-                    bot_response = f"Oops! Is your LM Studio Local Server running? Error: {e}"
+                        st.markdown(msg.content)
 
             # Clean up indicators and print the real text answer
             status_placeholder.empty()
