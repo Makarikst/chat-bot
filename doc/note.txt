@@ -1,0 +1,2 @@
+type=["txt", "md", "csv", "log", "json", "xml", "yaml", "yml", "toml", "ini", "cfg", "conf", "sh", "py", "js",
+              "ts", "html", "css", "pl", "htm", "docx", "cs", "cpp", "cxx","c", "lua", "kt", "toml", "swift", "php", ""]

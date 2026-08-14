@@ -1,5 +1,6 @@
 import os
 import base64
+
 from dotenv import load_dotenv
 import streamlit as st
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
@@ -17,27 +18,42 @@ if __name__ == '__main__':
     st.title("🤖 Mingly AI (Qwen если что)")
     st.write("Привет! Напиши мне сообщение.")
 
+
+    def encode_image_to_data_uri(file_obj, ext: str) -> str:
+        image_bytes = file_obj.getvalue()
+        b64 = base64.b64encode(image_bytes).decode("utf-8")
+        mime = f"image/{ext}" if ext != "jpeg" else "image/jpeg"
+        return f"data:{mime};base64,{b64}"
+
     # --- FILE UPLOAD SECTION ---
     if "uploaded_files" not in st.session_state:
         st.session_state.uploaded_files = {}
+    if "uploaded_image" not in st.session_state:
+        st.session_state.uploaded_image = None
 
     uploaded = st.file_uploader(
-        "Загрузить текстовый файл",
-        type=["txt", "md", "csv", "log", "json", "xml", "yaml", "yml", "toml", "ini", "cfg", "conf", "sh", "py", "js",
-              "ts", "html", "css", "pl", "htm", "docx", "cs", "cpp", "cxx","c", "lua", "kt", "toml", "swift", "php", ""],
+        "Загрузить файл",
+        image_types=["png", "jpg", "jpeg"],
+        text_types=["txt", "md", "csv", "log", "json", "xml", "yaml", "yml", "toml", "ini", "cfg", "conf", "sh", "py", "js", "ts", "html", "css", "pl", "htm", "docx", "cs", "cpp", "cxx", "c", "lua", "kt", "toml", "swift", "php"],
         accept_multiple_files=False
     )
 
     if uploaded:
-        # for file in uploaded:
-        try:
-            content = uploaded.read().decode("utf-8")
-        except UnicodeDecodeError:
-            uploaded.seek(0)
-            content = uploaded.read().decode("latin-1")
-        st.session_state.uploaded_files[uploaded.name] = content
-        # st.success(f"Загружено файлов: {len(uploaded)}")
         st.session_state.messages = []
+        ext = uploaded.name.rsplit(".", 1)[-1].lower()
+
+        if ext in image_types:
+            st.session_state.uploaded_image = encode_image_to_data_uri(uploaded, ext)
+            st.session_state.uploaded_files = {}
+            st.image(st.session_state.uploaded_image, caption=uploaded.name, use_container_width=False)
+        else:
+            try:
+                content = uploaded.read().decode("utf-8")
+            except UnicodeDecodeError:
+                uploaded.seek(0)
+                content = uploaded.read().decode("latin-1")
+            st.session_state.uploaded_files[uploaded.name] = content
+            st.session_state.uploaded_image = None
 
 
     # 2. Connect LangChain to LM Studio
