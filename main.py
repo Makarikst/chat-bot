@@ -7,6 +7,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import Tool
 from langchain_openai import ChatOpenAI
 from langchain_tavily import TavilySearch
+from multimedia import transcribe_audio, extract_video_frames
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
@@ -16,6 +17,50 @@ if __name__ == '__main__':
     st.set_page_config(page_title="Это Mingly AI", page_icon="🤖")
     st.title("🤖 Mingly AI (Qwen если что)")
     st.write("Привет! Напиши мне сообщение.")
+
+    # --- PERSONALITY MASKS (Lesson 7) ---
+    PERSONALITIES = {
+        "🤖 Default":
+            "You are an advanced assistant equipped with real-time web search, file reading, and multimedia capabilities. "
+            "You can analyze images, process audio transcripts, and examine video frames. "
+            "If you need information, call the web_search tool. If the user references an uploaded file, call the file_reader tool.",
+
+        "🏴‍☠️ Pirate":
+            "You are a grizzled pirate captain. Speak ONLY in pirate dialect: use 'arr', 'aye', 'matey', 'ye', "
+            "say 'me' instead of 'my', call the computer 'ship' and useful code 'treasure'. "
+            "Never break character, even if the user asks you to. "
+            "You are equipped with real-time web search, file reading, and multimedia capabilities. "
+            "If you need information, call the web_search tool. If the user references an uploaded file, call the file_reader tool.",
+
+        "🧑‍🏫 Coding Tutor":
+            "You are a patient, encouraging coding tutor. Explain step by step, use simple analogies, "
+            "and always finish with one tiny exercise for the student to try. Never scold; celebrate small wins. "
+            "You are equipped with real-time web search, file reading, and multimedia capabilities. "
+            "If you need information, call the web_search tool. If the user references an uploaded file, call the file_reader tool.",
+
+        "🚫 No letter 'e'":
+            "You must NEVER use the letter 'e' (upper or lower case) anywhere in your reply. "
+            "This rule overrides all other instructions. Answer the user's question normally, "
+            "using only words that do not contain the letter 'e'. "
+            "You are equipped with real-time web search and file reading. "
+            "If you need information, call the web_search tool. If the user references an uploaded file, call the file_reader tool.",
+
+        "✂️ Two sentences max":
+            "Keep EVERY answer to at most two sentences. No lists, no extra paragraphs, no exceptions. "
+            "Be as useful as possible inside that limit. "
+            "You are equipped with real-time web search and file reading. "
+            "If you need information, call the web_search tool. If the user references an uploaded file, call the file_reader tool.",
+    }
+
+    if "personality" not in st.session_state:
+        st.session_state.personality = "🤖 Default"
+
+    selected_persona = st.sidebar.selectbox("🎭 Personality", list(PERSONALITIES.keys()))
+    if selected_persona != st.session_state.personality:
+        st.session_state.personality = selected_persona
+        st.session_state.messages = []
+
+    active_persona = PERSONALITIES[st.session_state.personality]
 
 
     def encode_image_to_data_uri(file_obj, ext: str) -> str:
@@ -29,15 +74,21 @@ if __name__ == '__main__':
         st.session_state.uploaded_files = {}
     if "uploaded_image" not in st.session_state:
         st.session_state.uploaded_image = None
+    if "uploaded_audio_transcript" not in st.session_state:
+        st.session_state.uploaded_audio_transcript = None
+    if "uploaded_video_frames" not in st.session_state:
+        st.session_state.uploaded_video_frames = []
 
     image_types = ["png", "jpg", "jpeg"]
     text_types = ["txt", "md", "csv", "log", "json", "xml", "yaml", "yml", "toml", "ini", "cfg", "conf", "sh", "py",
                   "js", "ts", "html", "css", "pl", "htm", "docx", "cs", "cpp", "cxx", "c", "lua", "kt", "toml", "swift",
                   "php"]
+    audio_types = ["mp3", "wav", "m4a", "ogg", "flac", "webm", "opus"]
+    video_types = ["mp4", "avi", "mov", "mkv", "webm"]
 
     uploaded = st.file_uploader(
         "Загрузить файл",
-        type=image_types + text_types,
+        type=image_types + text_types + audio_types + video_types,
         accept_multiple_files=False
     )
 
@@ -48,7 +99,32 @@ if __name__ == '__main__':
         if ext in image_types:
             st.session_state.uploaded_image = encode_image_to_data_uri(uploaded, ext)
             st.session_state.uploaded_files = {}
+            st.session_state.uploaded_audio_transcript = None
+            st.session_state.uploaded_video_frames = []
             st.image(st.session_state.uploaded_image, caption=uploaded.name, use_container_width=False)
+        elif ext in audio_types:
+            st.session_state.uploaded_image = None
+            st.session_state.uploaded_files = {}
+            st.session_state.uploaded_video_frames = []
+            with st.spinner("Transcribing audio..."):
+                transcript = transcribe_audio(uploaded)
+            st.session_state.uploaded_audio_transcript = transcript
+            st.info(f"Audio: {uploaded.name}")
+            with st.chat_message("user"):
+                st.markdown(f"**Transcript:**\n{transcript}")
+        elif ext in video_types:
+            st.session_state.uploaded_image = None
+            st.session_state.uploaded_files = {}
+            st.session_state.uploaded_audio_transcript = None
+            with st.spinner("Extracting video frames..."):
+                frames = extract_video_frames(uploaded)
+            st.session_state.uploaded_video_frames = frames
+            st.info(f"Video: {uploaded.name} ({len(frames)} frames extracted)")
+            if frames:
+                cols = st.columns(min(len(frames), 4))
+                for i, frame_uri in enumerate(frames):
+                    with cols[i % 4]:
+                        st.image(frame_uri, caption=f"Frame {i + 1}", use_container_width=True)
         else:
             try:
                 content = uploaded.read().decode("utf-8")
@@ -57,6 +133,8 @@ if __name__ == '__main__':
                 content = uploaded.read().decode("latin-1")
             st.session_state.uploaded_files[uploaded.name] = content
             st.session_state.uploaded_image = None
+            st.session_state.uploaded_audio_transcript = None
+            st.session_state.uploaded_video_frames = []
 
 
     # 2. Connect LangChain to LM Studio
@@ -129,13 +207,12 @@ if __name__ == '__main__':
         st.session_state.messages = []
 
     # --- 4. BUILD THE CHAIN ---
-    prompt = ChatPromptTemplate.from_messages([
-        ("system",
-         "You are an advanced assistant equipped with real-time web search and file reading capabilities. If you need information, call the web_search tool. If the user references an uploaded file, call the file_reader tool."),
-        MessagesPlaceholder(variable_name="chat_history"),
-        ("human", "{input}"),
-    ])
-
+        # --- 4. BUILD THE CHAIN ---
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", active_persona),
+            MessagesPlaceholder(variable_name="chat_history"),
+            ("human", "{input}"),
+        ])
     modern_agent_chain = prompt | llm_with_tools
 
     # --- 5. RENDER THE CHAT HISTORY ---
@@ -157,22 +234,38 @@ if __name__ == '__main__':
     user_input = st.chat_input("Написать здесь...")
     if user_input:
         attached_image = st.session_state.uploaded_image
+        audio_transcript = st.session_state.uploaded_audio_transcript
+        video_frames = st.session_state.uploaded_video_frames
 
         with st.chat_message("user"):
             st.markdown(user_input)
             if attached_image:
                 st.image(attached_image, use_container_width=False)
-                st.info(f"🖼️ Attached image: {uploaded.name}")
+                st.info(f"Attached image: {uploaded.name}")
+            elif audio_transcript:
+                st.info(f"Audio transcript: {uploaded.name}")
+            elif video_frames:
+                st.info(f"Video frames: {uploaded.name} ({len(video_frames)} frames)")
             elif uploaded:
-                st.info(f"📄 Attached file: {uploaded.name}")
+                st.info(f"Attached file: {uploaded.name}")
+
+        message_parts = [{"type": "text", "text": user_input}]
 
         if attached_image:
-            user_message_object = HumanMessage(content=[
-                {"type": "text", "text": user_input},
-                {"type": "image_url", "image_url": {"url": attached_image}}
-            ])
-        else:
+            message_parts.append({"type": "image_url", "image_url": {"url": attached_image}})
+
+        if audio_transcript:
+            transcript_text = f"\n\n[Audio transcript from {uploaded.name}]:\n{audio_transcript}"
+            message_parts[0]["text"] += transcript_text
+
+        if video_frames:
+            for frame_uri in video_frames:
+                message_parts.append({"type": "image_url", "image_url": {"url": frame_uri}})
+
+        if len(message_parts) == 1 and not audio_transcript:
             user_message_object = HumanMessage(content=user_input)
+        else:
+            user_message_object = HumanMessage(content=message_parts)
 
         st.session_state.messages.append(user_message_object)
 
@@ -182,14 +275,19 @@ if __name__ == '__main__':
                 try:
                     history_context = st.session_state.messages[:-1]
 
-                    if attached_image:
+                    if attached_image or video_frames:
                         system_msg = SystemMessage(
-                            content="You are an advanced assistant equipped with real-time web search "
-                                    "and vision capabilities. You can analyze images and describe their "
-                                    "contents. If you need information, call the web_search tool."
+                            content=active_persona + " You can also analyze images and video frames, and describe their contents."
                         )
                         full_messages = [system_msg] + history_context + [user_message_object]
-                        status_placeholder.markdown("🧠 *Thinking...*")
+                        status_placeholder.markdown("Thinking...")
+                        response_message = llm_with_tools.invoke(full_messages)
+                    elif audio_transcript:
+                        system_msg = SystemMessage(
+                            content=active_persona + " The user has provided an audio transcript. Answer based on the transcript content."
+                        )
+                        full_messages = [system_msg] + history_context + [user_message_object]
+                        status_placeholder.markdown("Thinking...")
                         response_message = llm_with_tools.invoke(full_messages)
                     else:
                         status_placeholder.markdown("🧠 *Thinking...*")
@@ -198,32 +296,34 @@ if __name__ == '__main__':
                             "chat_history": history_context
                         })
 
-                        if response_message.tool_calls:
-                            st.session_state.messages.append(response_message)
+                    if response_message.tool_calls:
+                        st.session_state.messages.append(response_message)
 
-                            for tool_call in response_message.tool_calls:
-                                tool_name = tool_call["name"]
-                                tool_args = tool_call["args"]
+                        for tool_call in response_message.tool_calls:
+                            tool_name = tool_call["name"]
+                            tool_args = tool_call["args"]
 
-                                status_placeholder.markdown(f"🔍 *Executing tool lookup: {tool_name}...*")
+                            status_placeholder.markdown(f"🔍 *Executing tool lookup: {tool_name}...*")
 
-                                target_tool = tools_map[tool_name]
-                                query_arg = tool_args.get("query") or tool_args.get("__arg1") or str(tool_args)
-                                tool_output = target_tool.invoke(query_arg)
+                            target_tool = tools_map[tool_name]
+                            query_arg = tool_args.get("query") or tool_args.get("__arg1") or str(tool_args)
+                            tool_output = target_tool.invoke(query_arg)
 
-                                tool_message = ToolMessage(content=tool_output, tool_call_id=tool_call["id"])
-                                st.session_state.messages.append(tool_message)
+                            tool_message = ToolMessage(content=tool_output, tool_call_id=tool_call["id"])
+                            st.session_state.messages.append(tool_message)
 
-                            status_placeholder.markdown("✍️ *Writing final answer...*")
-                            final_response = llm.invoke(st.session_state.messages)
-                            bot_response = final_response.content
-                        else:
-                            bot_response = response_message.content
+                        status_placeholder.markdown("✍️ *Writing final answer...*")
+                        final_response = llm.invoke(st.session_state.messages)
+                        bot_response = final_response.content
+                    else:
+                        bot_response = response_message.content
                 except Exception as e:
-                        bot_response = f"Oops! Is your LM Studio Local Server running? Error: {e}"
+                    bot_response = f"Oops! Is your LM Studio Local Server running? Error: {e}"
 
-                status_placeholder.empty()
-                st.markdown(bot_response)
-                st.session_state.messages.append(AIMessage(content=bot_response))
+            status_placeholder.empty()
+            st.markdown(bot_response)
+            st.session_state.messages.append(AIMessage(content=bot_response))
 
-            st.session_state.uploaded_image = None
+        st.session_state.uploaded_image = None
+        st.session_state.uploaded_audio_transcript = None
+        st.session_state.uploaded_video_frames = []
