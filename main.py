@@ -207,12 +207,12 @@ if __name__ == '__main__':
         st.session_state.messages = []
 
     # --- 4. BUILD THE CHAIN ---
-        # --- 4. BUILD THE CHAIN ---
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", active_persona),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-        ])
+
+    prompt = ChatPromptTemplate.from_messages([
+        ("system", active_persona),
+        MessagesPlaceholder(variable_name="chat_history"),
+        ("human", "{input}"),
+    ])
     modern_agent_chain = prompt | llm_with_tools
 
     # --- 5. RENDER THE CHAT HISTORY ---
