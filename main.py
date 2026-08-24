@@ -8,6 +8,7 @@ from langchain_core.tools import Tool
 from langchain_openai import ChatOpenAI
 from langchain_tavily import TavilySearch
 from multimedia import transcribe_audio, extract_video_frames
+from chat_storage import new_chat_id, save_chat, load_chat, list_chats, records_to_messages
 
 # Press the green button in the gutter to run the script.
 if __name__ == '__main__':
@@ -61,6 +62,28 @@ if __name__ == '__main__':
         st.session_state.messages = []
 
     active_persona = PERSONALITIES[st.session_state.personality]
+
+    # --- CHAT LOGS & SESSIONS (Lesson 8) ---
+    if "active_chat_id" not in st.session_state:
+        st.session_state.active_chat_id = new_chat_id()
+
+    st.sidebar.divider()
+    st.sidebar.subheader("💬 Chats")
+
+    if st.sidebar.button("➕ New Chat", width="stretch"):
+        st.session_state.messages = []
+        st.session_state.active_chat_id = new_chat_id()
+        st.rerun()
+
+    for chat in list_chats():
+        label = chat["title"] or "New chat"
+        if chat["id"] == st.session_state.active_chat_id:
+            label += "  ✓"
+        if st.sidebar.button(label, key=f"open_{chat['id']}", width="stretch"):
+            if chat["id"] != st.session_state.active_chat_id:
+                st.session_state.messages = records_to_messages(chat["messages"])
+                st.session_state.active_chat_id = chat["id"]
+                st.rerun()
 
 
     def encode_image_to_data_uri(file_obj, ext: str) -> str:
@@ -327,3 +350,7 @@ if __name__ == '__main__':
         st.session_state.uploaded_image = None
         st.session_state.uploaded_audio_transcript = None
         st.session_state.uploaded_video_frames = []
+
+        # --- 7. PERSIST THE CONVERSATION (Lesson 8) ---
+        save_chat(st.session_state.active_chat_id, st.session_state.messages)
+        st.rerun()
