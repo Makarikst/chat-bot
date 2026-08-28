@@ -54,7 +54,7 @@ if __name__ == '__main__':
 
         "🌊 Ocean Breeze": """
                 section[data-testid="stMain"] { background: linear-gradient(160deg, #e0f7fa 0%, #b3e5fc 100%); }
-                section[data-testid="stSidebar"] { background: #e1f5fe; }
+                section[data-testid="stSidebar"] { background: #e1f5fe; color: #000000; }
                 div[data-testid="stChatMessage"] {
                     border: 2px solid #4fc3f7;
                     border-radius: 20px;
