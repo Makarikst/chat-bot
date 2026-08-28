@@ -19,6 +19,67 @@ if __name__ == '__main__':
     st.title("🤖 Mingly AI (Qwen если что)")
     st.write("Привет! Напиши мне сообщение.")
 
+    # --- CUSTOM THEMES (Lesson 9) ---
+    THEMES = {
+        "🌌 Neon Space": """
+                @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700&display=swap');
+                section[data-testid="stMain"] { background: radial-gradient(ellipse at top, #101035 0%, #03030f 70%); }
+                section[data-testid="stSidebar"] { background: #070720; }
+                div[data-testid="stChatMessage"] {
+                    border: 1px solid #00e5ff;
+                    border-radius: 14px;
+                    box-shadow: 0 0 12px rgba(0, 229, 255, 0.55), inset 0 0 8px rgba(0, 229, 255, 0.15);
+                    background: rgba(10, 10, 46, 0.85);
+                }
+                h1 { font-family: 'Orbitron', monospace; color: #00e5ff; text-shadow: 0 0 10px rgba(0, 229, 255, 0.8); }
+                div[data-testid="stChatInput"] { border: 1px solid #00e5ff; border-radius: 12px; box-shadow: 0 0 8px rgba(0, 229, 255, 0.4); }
+            """,
+
+        "👾 Pixel Arcade": """
+                @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+                section[data-testid="stMain"] { background: #1a1a2e; }
+                section[data-testid="stSidebar"] { background: #14142a; }
+                div[data-testid="stChatMessage"] {
+                    border: 3px solid #ffcc00;
+                    border-radius: 0;
+                    box-shadow: 5px 5px 0 #ff00aa;
+                    background: #22223a;
+                    font-family: 'Press Start 2P', monospace;
+                    font-size: 11px;
+                    line-height: 2;
+                }
+                h1 { font-family: 'Press Start 2P', monospace; color: #ffcc00; font-size: 1.4rem; }
+                div[data-testid="stChatInput"] { border: 3px solid #ffcc00; border-radius: 0; box-shadow: 4px 4px 0 #ff00aa; }
+            """,
+
+        "🌊 Ocean Breeze": """
+                section[data-testid="stMain"] { background: linear-gradient(160deg, #e0f7fa 0%, #b3e5fc 100%); }
+                section[data-testid="stSidebar"] { background: #e1f5fe; }
+                div[data-testid="stChatMessage"] {
+                    border: 2px solid #4fc3f7;
+                    border-radius: 20px;
+                    box-shadow: 0 4px 14px rgba(79, 195, 247, 0.35);
+                    background: #ffffff;
+                    font-family: 'Comic Sans MS', 'Comic Neue', cursive;
+                    color: #000000;
+                }
+                h1 { font-family: 'Comic Sans MS', 'Comic Neue', cursive; color: #0277bd; }
+                div[data-testid="stChatInput"] { border: 2px solid #4fc3f7; border-radius: 16px; }
+            """,
+    }
+
+    if "theme" not in st.session_state:
+        st.session_state.theme = "🌌 Neon Space"
+
+    selected_theme = st.sidebar.selectbox("🎨 Theme", list(THEMES.keys()))
+    if selected_theme != st.session_state.theme:
+        st.session_state.theme = selected_theme
+
+    active_css = THEMES[st.session_state.theme]
+    st.markdown(f"<style>{active_css}</style>", unsafe_allow_html=True)
+
+    # --- PERSONALITY MASKS (Lesson 7) ---
+
     # --- PERSONALITY MASKS (Lesson 7) ---
     PERSONALITIES = {
         "🤖 Default":
